@@ -12,9 +12,20 @@ import {
 } from "tsx-create-element";
 import { Plane, Cube } from "../common/mesh-utils";
 import * as MeshUtils from "../common/mesh-utils";
-import { player, enemy, asteroid } from "../characters/spaceship";
+import { player } from "../characters/player";
+import {enemy} from "../characters/enemy"
+import { asteroid } from "../characters/asteroid";
 import * as gameUtils from "../common/game-utils";
 import { Key } from "ts-key-enum";
+import {sky} from "../characters/sky"
+
+// It follows a tree like structure where every node defines a celestial object and its children if any
+interface gameSystemDescription {
+    width:number,
+    height:number,
+    length:number    
+  };
+
 // In this scene we will draw one rectangle with a texture
 export default class myGameScene extends Scene {
     camera: Camera;
@@ -25,14 +36,19 @@ export default class myGameScene extends Scene {
     programs: { [name: string]: ShaderProgram } = {};
     meshes: { [name: string]: Mesh } = {};
 
+    systems: {[name:string]:gameSystemDescription};
+    
     // enemyLevels: {[levNum: number]: enemy[]} = {};
-    // game attributes
+    // game attributes & characters area
     myPlayer: player;
     enemyLevel: enemy[][];
     asteroidLevel: asteroid[][];
     numOfBatches: number = 3; // each batch has 3 enemies
     batchDistance: number = 10; // this is the distance between each batch of enemies
     objectDistance: number = 2.5;
+    testEnemy: enemy;
+    mySky:sky;
+
 
     texcoordinates: Float32Array = new Float32Array([0, 1, 1, 1, 1, 0, 0, 0]);
     wrap_s: number;
@@ -68,10 +84,10 @@ export default class myGameScene extends Scene {
             ["spaceship-texture1"]: {
                 url: "models/spaceships/sh3.jpg",
                 type: "image"
-            },
-            ["spaceship"]: { url: "models/Suzanne/Suzanne.obj", type: "text" },
+            }, 
+            ["spaceship"]: { url: "models/spaceships/spaceship2.obj", type: "text" },
             ["spaceship-texture"]: {
-                url: "models/spaceships/sh3.jpg",
+                url: "models/spaceships/sh3.png",
                 type: "image"
             },
             ["asteroid"]: { url: "models/astroid/ad.obj", type: "text" },
@@ -79,10 +95,16 @@ export default class myGameScene extends Scene {
                 url: "models/astroid/astext.jpg",
                 type: "image"
             },
+            ["asteroid-texture1"]: {
+                url: "models/astroid/astext1.jpg",
+                type: "image"
+            },
             ["enemy-texture"]: {
                 url: "models/spaceships/sh3_s.jpg",
                 type: "image"
             },
+            
+            ["systems"]:{url:'data/solar-systems.json', type:'json'},
             ...Object.fromEntries(
                 myGameScene.cubemapDirections.map(dir => [
                     dir,
@@ -92,85 +114,31 @@ export default class myGameScene extends Scene {
         });
     }
 
+    public PrepareShaderProgram(progName:string, vertResource:string, fragResource:string ){
+        this.programs[progName] = new ShaderProgram(this.gl);
+        this.programs[progName].attach(
+            this.game.loader.resources[vertResource],
+            this.gl.VERTEX_SHADER
+        );
+        this.programs[progName].attach(
+            this.game.loader.resources[fragResource],
+            this.gl.FRAGMENT_SHADER
+        );
+        this.programs[progName].link();
+    }
+
     public start(): void {
-        this.programs["cube"] = new ShaderProgram(this.gl);
-        this.programs["cube"].attach(
-            this.game.loader.resources["texture.vert"],
-            this.gl.VERTEX_SHADER
-        );
-        this.programs["cube"].attach(
-            this.game.loader.resources["texture.frag"],
-            this.gl.FRAGMENT_SHADER
-        );
-        this.programs["cube"].link();
-
-        this.programs["sky"] = new ShaderProgram(this.gl);
-        this.programs["sky"].attach(
-            this.game.loader.resources["sky-cube.vert"],
-            this.gl.VERTEX_SHADER
-        );
-        this.programs["sky"].attach(
-            this.game.loader.resources["sky-cube.frag"],
-            this.gl.FRAGMENT_SHADER
-        );
-        this.programs["sky"].link();
-
+        this.systems = this.game.loader.resources["systems"];
+        this.PrepareShaderProgram("cube", "texture.vert", "texture.frag");
+        this.PrepareShaderProgram("sky","sky-cube.vert","sky-cube.frag");
         this.meshes["spaceship"] = MeshUtils.LoadOBJMesh(
             this.gl,
             this.game.loader.resources["spaceship"]
         );
-        {
-            this.textures[0] = this.gl.createTexture();
-            this.gl.activeTexture(this.gl.TEXTURE0);
-            this.gl.bindTexture(this.gl.TEXTURE_2D, this.textures[0]);
-            const image: ImageData = this.game.loader.resources["texture"];
-            this.gl.texImage2D(
-                this.gl.TEXTURE_2D,
-                0,
-                this.gl.RGBA8,
-                this.gl.RGBA,
-                this.gl.UNSIGNED_BYTE,
-                image
-            );
-            this.gl.generateMipmap(this.gl.TEXTURE_2D);
-        }
- 
-         
-        const target_directions = [
-            this.gl.TEXTURE_CUBE_MAP_NEGATIVE_X,
-            this.gl.TEXTURE_CUBE_MAP_NEGATIVE_Y,
-            this.gl.TEXTURE_CUBE_MAP_NEGATIVE_Z,
-            this.gl.TEXTURE_CUBE_MAP_POSITIVE_X,
-            this.gl.TEXTURE_CUBE_MAP_POSITIVE_Y,
-            this.gl.TEXTURE_CUBE_MAP_POSITIVE_Z
-        ];
+      // sky
+      this.mySky = new sky(this);
 
-        this.textures[4] = this.gl.createTexture();
-        this.gl.bindTexture(this.gl.TEXTURE_CUBE_MAP, this.textures[4]);
-        this.gl.pixelStorei(this.gl.UNPACK_ALIGNMENT, 4);
-        for (let i = 0; i < 6; i++) {
-            this.gl.texImage2D(
-                target_directions[i],
-                0,
-                this.gl.RGBA,
-                this.gl.RGBA,
-                this.gl.UNSIGNED_BYTE,
-                this.game.loader.resources[myGameScene.cubemapDirections[i]]
-            );
-        }
-        this.gl.generateMipmap(this.gl.TEXTURE_CUBE_MAP);
-        this.sampler = this.gl.createSampler();
 
-        this.gl.samplerParameteri(
-            this.sampler,
-            this.gl.TEXTURE_MAG_FILTER,
-            this.gl.LINEAR
-        );
-        this.gl.samplerParameteri(
-            this.sampler,
-            this.gl.TEXTURE_MIN_FILTER,
-            this.gl.LINEAR_MIPMAP_LINEAR
-        );
 
         this.wrap_s = this.wrap_t = this.gl.REPEAT;
         this.mag_filter = this.min_filter = this.gl.NEAREST;
@@ -239,42 +207,34 @@ export default class myGameScene extends Scene {
         this.myPlayer = new player(
             vec3.fromValues(0, 0, 0),
             0,
-            2,
-            2,
-            2,
+            this.systems[Object.keys(this.systems)[0]].width,
+            this.systems[Object.keys(this.systems)[0]].height,
+            this.systems[Object.keys(this.systems)[0]].length,
             5,
             vec3.fromValues(0, 0, 1),
             100,
             this
         );
-    this.asteroidLevel = [];
 
-        for (var i: number = 0; i < this.numOfBatches; i++) {
-            this.asteroidLevel[i] = [];
-            for (var j: number = -1; j <= 1; j++) {
-                let randNum = gameUtils.getRndInteger(-1, 1);
-                this.asteroidLevel[i][j + 1] = new asteroid(
-                    vec3.fromValues(
-                        j * this.objectDistance,
-                        randNum * this.objectDistance,
-                        (i + 1) * this.batchDistance
-                    ),
-                    10,
-                    2,
-                    2,
-                    2,
-                    3,
-                    vec3.fromValues(0, 0, -1),
-                    100,
-                    this
-                );
-            }
-        }
+        this.testEnemy = new enemy(
+            vec3.fromValues(0, 0, 4),
+            0,
+            this.systems[Object.keys(this.systems)[0]].width,
+            this.systems[Object.keys(this.systems)[0]].height,
+            this.systems[Object.keys(this.systems)[0]].length,
+            5,
+            vec3.fromValues(0, 0, 1),
+            100,
+            this
+        );
+            
+        this.generateLevel();
     }
 
     public draw(deltaTime: number): void {
-        this.controller.update(deltaTime);
 
+        // -----------------------GAME LOOP ----------------------------
+        this.controller.update(deltaTime);
         if (this.game.input.isKeyJustDown(Key.ArrowUp)) {
             this.myPlayer.moveUp();
         }
@@ -287,89 +247,56 @@ export default class myGameScene extends Scene {
         else if (this.game.input.isKeyJustDown(Key.ArrowRight)) {
             this.myPlayer.moveRight();
         }
+
+
         this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
-
+        // _------------- Gui Updating Area ----------------
+        
         this.programs["cube"].use();
-        this.meshes["cube"].setBufferData(
-            "texcoords",
-            this.texcoordinates,
-            this.gl.STREAM_DRAW
-        );
-
         let VP = this.camera.ViewProjectionMatrix;
-
         let playerMat = mat4.clone(VP);
-
         mat4.translate(playerMat, playerMat, this.playerPosition);
-
-        this.programs["cube"].setUniformMatrix4fv("MVP", false, playerMat);
-        this.programs["cube"].setUniform4f("tint", [1, 1, 1, 1]);
-
-        this.gl.activeTexture(this.gl.TEXTURE0);
-        this.gl.bindTexture(this.gl.TEXTURE_2D, this.textures["spaceship"]);
-        this.programs["cube"].setUniform1i("texture_sampler", 0);
-
-        //this.meshes['spaceship'].draw(this.gl.TRIANGLES);
+        
         this.myPlayer.draw(VP, this.programs["cube"]);
-        this.myPlayer.incrementScore();
-        // for(var i: number = 0; i < this.numOfBatches; i++) {
-
-        // }
-
+        this.myPlayer.incrementScore(); 
+        
+        this.testEnemy.draw(VP, this.programs["cube"])
+        
         for (var i: number = 0; i < this.numOfBatches; i++) {
             for (var j: number = -1; j <= 1; j++) {
                 this.asteroidLevel[i][j + 1].updatePosition(this.myPlayer);
                 this.asteroidLevel[i][j + 1].draw(VP, this.programs["cube"]);
             }
         }
-        this.drawSky(VP);
-        // enemies and area code
-
-        //
+        this.mySky.draw(VP,this);        
     }
 
-    public drawSky(VP: mat4) {
-        // the sky drawing
-        let M = mat4.clone(VP);
-        mat4.translate(M, M, vec3.fromValues(0, 0, -2));
-        mat4.rotateY(M, M, performance.now() / 1000);
-
-        this.gl.bindTexture(this.gl.TEXTURE_CUBE_MAP, this.textures[4]);
-
-        this.gl.cullFace(this.gl.FRONT);
-        this.gl.depthMask(false);
-
-        this.programs["sky"].use();
-
-        this.programs["sky"].setUniformMatrix4fv(
-            "VP",
-            false,
-            this.camera.ViewProjectionMatrix
-        );
-        this.programs["sky"].setUniform3f("cam_position", this.camera.position);
-
-        let skyMat = mat4.create();
-        mat4.translate(skyMat, skyMat, this.camera.position);
-
-        this.programs["sky"].setUniformMatrix4fv("M", false, skyMat);
-
-        this.programs["sky"].setUniform4f("tint", [1, 1, 1, 1]);
-        this.programs["sky"].setUniformMatrix4fv(
-            "M_it",
-            true,
-            mat4.invert(mat4.create(), M)
-        );
-
-        this.gl.activeTexture(this.gl.TEXTURE0);
-        this.gl.bindTexture(this.gl.TEXTURE_CUBE_MAP, this.textures[4]);
-        this.programs["sky"].setUniform1i("cube_texture_sampler", 0);
-        this.gl.bindSampler(0, this.sampler);
-
-        this.meshes["sky"].draw(this.gl.TRIANGLES);
-
-        this.gl.cullFace(this.gl.BACK);
-        this.gl.depthMask(true);
+    public generateLevel(){
+            
+    this.asteroidLevel = [];
+    for (var i: number = 0; i < this.numOfBatches; i++) {
+        this.asteroidLevel[i] = [];
+        for (var j: number = -1; j <= 1; j++) {
+            let randNum = gameUtils.getRndInteger(-1, 1);
+            this.asteroidLevel[i][j + 1] = new asteroid(
+                vec3.fromValues(
+                    j * this.objectDistance,
+                    randNum * this.objectDistance,
+                    (i + 1) * this.batchDistance
+                ),
+                10,
+                2,
+                2,
+                2,
+                3,
+                vec3.fromValues(0, 0, -1),
+                100,
+                this
+            );
+        }
     }
+    }
+  
     public end(): void {
         for (let key in this.programs) {
             this.programs[key].dispose;
@@ -388,7 +315,11 @@ export default class myGameScene extends Scene {
     /////////////////////////////////////////////////////////
     ////// ADD CONTROL TO THE WEBPAGE (NOT IMPORTNANT) //////
     /////////////////////////////////////////////////////////
-    private setupControls() {}
+    private setupControls() {
+        const healthBar = document.querySelector("#bar");
+        healthBar.innerHTML = "100"
+
+    }
 
     private clearControls() {
         const controls = document.querySelector("#controls");
