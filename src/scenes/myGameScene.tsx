@@ -260,7 +260,7 @@ export default class myGameScene extends Scene {
         this.myPlayer.draw(VP, this.programs["cube"]);
         this.myPlayer.incrementScore(); 
         
-        this.testEnemy.draw(VP, this.programs["cube"])
+        //this.testEnemy.draw(VP, this.programs["cube"])
         
         for (var i: number = 0; i < this.numOfBatches; i++) {
             for (var j: number = -1; j <= 1; j++) {

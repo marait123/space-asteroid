@@ -1,5 +1,8 @@
+// under construction
+
 import { vec3, mat4, quat } from 'gl-matrix';
-import { player, enemy } from "./player";
+import { player } from "./player";
+import {enemy} from './enemy'
 //This is the abstract base of all scenes
 
 enum BOOSTER_TYPE {
