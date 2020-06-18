@@ -1,6 +1,5 @@
-# WebGL Lab 3
+# WebGL game 
 
-# WARNING: LAB UNDER CONSTRUCTION
 
 ## Steps to run
 
@@ -15,7 +14,7 @@
 
 **Debugging:** You will need the extension [Debugger for Chrome](https://marketplace.visualstudio.com/items?itemName=msjsdiag.debugger-for-chrome). After running till Step 5 from [Steps to run](#steps-to-run), press F5 or click the Debug icon on the left bar then choose *"Launch Chrome against"* localhost" and click the *"Start Debugging"* button (play button). Now you can use breakpoints, watch, etc. The required configuration for the debugger is written in `.vscode/launch.json`.
 
-## Lab Structure
+## Code Structure
 
 **index.html** is the webpage in which we run our app. It is the entry point of our app and it links to the main script file "app.ts"
 
